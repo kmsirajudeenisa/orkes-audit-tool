@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Orkes Audit</title>
+  <style>
+    :root {
+      font-family: Arial, Helvetica, sans-serif;
+      color: #1f2937;
+      background: #f5f7fb;
+    }
+
+    * { box-sizing: border-box; }
+
+    body { margin: 0; padding: 28px; }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      background: #ffffff;
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      padding: 24px;
+      box-shadow: 0 4px 18px rgba(15, 23, 42, 0.05);
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-bottom: 18px;
+    }
+
+    h1 { margin: 0; font-size: 24px; }
+    .subtitle { margin: 6px 0 0; color: #6b7280; font-size: 13px; }
+
+    .actions { display: flex; gap: 10px; align-items: center; }
+
+    input[type="search"] {
+      width: min(320px, 60vw);
+      padding: 10px 12px;
+      border: 1px solid #d1d5db;
+      border-radius: 7px;
+      font-size: 14px;
+    }
+
+    button {
+      padding: 10px 15px;
+      border: 0;
+      border-radius: 7px;
+      background: #2563eb;
+      color: #ffffff;
+      font-size: 14px;
+      cursor: pointer;
+    }
+
+    button:disabled { opacity: 0.6; cursor: wait; }
+
+    .status {
+      min-height: 20px;
+      margin: 8px 0 14px;
+      color: #6b7280;
+      font-size: 13px;
+    }
+
+    .status.error { color: #b91c1c; }
+
+    .table-wrap { width: 100%; overflow-x: auto; }
+
+    table {
+      width: 100%;
+      min-width: 1000px;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    thead { background: #f3f4f6; }
+
+    th, td {
+      padding: 12px;
+      border-bottom: 1px solid #e5e7eb;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th { color: #374151; font-weight: 600; white-space: nowrap; }
+    tbody tr:hover { background: #fafafa; }
+
+    .type {
+      display: inline-block;
+      min-width: 42px;
+      padding: 4px 8px;
+      border-radius: 5px;
+      text-align: center;
+      font-weight: 700;
+      font-size: 11px;
+    }
+
+    .type-req { color: #1d4ed8; background: #dbeafe; }
+    .type-res { color: #047857; background: #d1fae5; }
+    .type-other { color: #4b5563; background: #e5e7eb; }
+
+    pre {
+      max-width: 520px;
+      max-height: 220px;
+      overflow: auto;
+      margin: 0;
+      padding: 10px;
+      border: 1px solid #e5e7eb;
+      border-radius: 6px;
+      background: #f8fafc;
+      color: #111827;
+      font: 12px/1.5 Consolas, Monaco, monospace;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    .empty { padding: 28px; text-align: center; color: #6b7280; }
+
+    @media (max-width: 640px) {
+      body { padding: 12px; }
+      .container { padding: 16px; }
+      h1 { font-size: 21px; }
+      .actions { width: 100%; }
+      input[type="search"] { flex: 1; width: auto; }
+    }
+  </style>
+</head>
+<body>
+  <main class="container">
+    <div class="header">
+      <div>
+        <h1>Orkes Audit</h1>
+        <p class="subtitle">Workflow request and response audit records</p>
+      </div>
+      <div class="actions">
+        <input id="searchInput" type="search" placeholder="Search audit records..." aria-label="Search audit records" />
+        <button id="refreshButton" type="button">Refresh</button>
+      </div>
+    </div>
+
+    <div id="status" class="status" role="status">Loading audit records...</div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Seq No</th>
+            <th>Work Item</th>
+            <th>Task Name</th>
+            <th>Workflow Name</th>
+            <th>Type</th>
+            <th>Data</th>
+          </tr>
+        </thead>
+        <tbody id="auditTableBody">
+          <tr><td class="empty" colspan="6">Loading...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </main>
+
+  <script>
+    // Update this URL to match the @GetMapping path on your controller.
+    // Example: if the controller has @RequestMapping("/api/orkes-audit")
+    // and this method has @GetMapping, use "/api/orkes-audit".
+    const API_URL = "/api/orkes-audit";
+
+    const tableBody = document.getElementById("auditTableBody");
+    const statusElement = document.getElementById("status");
+    const refreshButton = document.getElementById("refreshButton");
+    const searchInput = document.getElementById("searchInput");
+
+    let auditRecords = [];
+
+    function formatData(data) {
+      if (data === null || data === undefined || data === "") return "";
+
+      if (typeof data === "object") {
+        return JSON.stringify(data, null, 2);
+      }
+
+      try {
+        return JSON.stringify(JSON.parse(data), null, 2);
+      } catch {
+        return String(data);
+      }
+    }
+
+    function addCell(row, value) {
+      const cell = document.createElement("td");
+      cell.textContent = value === null || value === undefined ? "" : String(value);
+      row.appendChild(cell);
+      return cell;
+    }
+
+    function renderTable(records) {
+      tableBody.replaceChildren();
+
+      if (!records.length) {
+        const row = document.createElement("tr");
+        const cell = document.createElement("td");
+        cell.colSpan = 6;
+        cell.className = "empty";
+        cell.textContent = auditRecords.length ? "No matching records found." : "No audit records found.";
+        row.appendChild(cell);
+        tableBody.appendChild(row);
+        return;
+      }
+
+      records.forEach((record) => {
+        const row = document.createElement("tr");
+        addCell(row, record.seqNo);
+        addCell(row, record.workItem);
+        addCell(row, record.taskName);
+        addCell(row, record.workflowName);
+
+        const typeCell = document.createElement("td");
+        const typeBadge = document.createElement("span");
+        const type = String(record.type || "").toUpperCase();
+        typeBadge.className = "type " + (type === "REQ" ? "type-req" : type === "RES" ? "type-res" : "type-other");
+        typeBadge.textContent = type;
+        typeCell.appendChild(typeBadge);
+        row.appendChild(typeCell);
+
+        const dataCell = document.createElement("td");
+        const dataBlock = document.createElement("pre");
+        dataBlock.textContent = formatData(record.data);
+        dataCell.appendChild(dataBlock);
+        row.appendChild(dataCell);
+
+        tableBody.appendChild(row);
+      });
+    }
+
+    function applySearch() {
+      const query = searchInput.value.trim().toLowerCase();
+      if (!query) {
+        renderTable(auditRecords);
+        return;
+      }
+
+      const filtered = auditRecords.filter((record) =>
+        [record.seqNo, record.workItem, record.taskName, record.workflowName, record.type, record.data]
+          .some((value) => String(value ?? "").toLowerCase().includes(query))
+      );
+      renderTable(filtered);
+    }
+
+    async function loadAuditRecords() {
+      refreshButton.disabled = true;
+      statusElement.className = "status";
+      statusElement.textContent = "Loading audit records...";
+
+      try {
+        const response = await fetch(API_URL, {
+          method: "GET",
+          headers: { "Accept": "application/json" }
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status} - ${response.statusText}`);
+        }
+
+        const result = await response.json();
+        if (!Array.isArray(result)) {
+          throw new Error("Expected the API to return a JSON array.");
+        }
+
+        auditRecords = result;
+        applySearch();
+        statusElement.textContent = `${auditRecords.length} record(s) found`;
+      } catch (error) {
+        auditRecords = [];
+        renderTable([]);
+        statusElement.className = "status error";
+        statusElement.textContent = `Unable to load audit records: ${error.message}. Check API_URL and confirm the backend is running.`;
+      } finally {
+        refreshButton.disabled = false;
+      }
+    }
+
+    refreshButton.addEventListener("click", loadAuditRecords);
+    searchInput.addEventListener("input", applySearch);
+    loadAuditRecords();
+  </script>
+</body>
+</html>

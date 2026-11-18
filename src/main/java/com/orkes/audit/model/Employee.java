@@ -1,4 +1,4 @@
-package com.example.employeesearch.model;
+package com.orkes.audit.model;
 
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;

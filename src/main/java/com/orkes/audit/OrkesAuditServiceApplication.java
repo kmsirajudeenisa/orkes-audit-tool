@@ -1,12 +1,12 @@
-package com.example.employeesearch;
+package com.orkes.audit;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @SpringBootApplication
-public class EmployeeSearchApplication {
+public class OrkesAuditServiceApplication {
 
     public static void main(String[] args) {
-        SpringApplication.run(EmployeeSearchApplication.class, args);
+        SpringApplication.run(OrkesAuditServiceApplication.class, args);
     }
 }
